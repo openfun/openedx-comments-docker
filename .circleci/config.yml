@@ -47,11 +47,11 @@ jobs:
           name: Store docker image in cache
           command: |
             docker save \
-              -o docker/images/forum.tar \
+              -o forum.tar \
               forum:${CIRCLE_SHA1}
       - save_cache:
           paths:
-            - ~/forum/docker/images/
+            - ~/forum/
           key: docker-debian-images-{{ .Revision }}
 
   # ---- DockerHub publication job ----
@@ -67,7 +67,7 @@ jobs:
       - run:
           name: Load images to docker engine
           command: |
-            docker load < docker/images/forum.tar
+            docker load < forum.tar
       # Login to DockerHub to Publish new images
       #
       # Nota bene: you'll need to define the following secrets environment vars
