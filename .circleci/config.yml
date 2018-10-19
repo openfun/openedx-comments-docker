@@ -1,0 +1,107 @@
+# Configuration file anchors
+generate-version-file: &generate-version-file
+  run:
+    name: Create a version.json
+    command: |
+      # Create a version.json à-la-mozilla
+      # https://github.com/mozilla-services/Dockerflow/blob/master/docs/version_object.md
+      printf '{"commit":"%s","version":"%s","source":"https://github.com/%s/%s","build":"%s"}\n' \
+        "$CIRCLE_SHA1" \
+        "$CIRCLE_TAG" \
+        "$CIRCLE_PROJECT_USERNAME" \
+        "$CIRCLE_PROJECT_REPONAME" \
+        "$CIRCLE_BUILD_URL" > version.json
+version: 2
+jobs:
+  # Docker/back-end jobs
+  # Build job
+  # Build the Docker image ready for production
+  build:
+    # We use the machine executor, i.e. a VM, not a container
+    machine:
+      # Cache docker layers so that we strongly speed up this job execution
+      docker_layer_caching: true
+    working_directory: ~/forum
+    steps:
+      # Checkout repository sources
+      - checkout
+      # Generate a version.json file describing app release
+      - <<: *generate-version-file
+      # Each image is tagged with the current git commit sha1 to avoid
+      # collisions in parallel builds.
+      - run:
+          name: Build production image
+          command: |
+            docker build \
+              -t forum:${CIRCLE_SHA1} \
+              .
+      - run:
+          name: Check built image availability
+          command: docker images "forum:${CIRCLE_SHA1}*"
+      # Since we cannot rely on CircleCI's Docker layers cache (for obscure
+      # reasons some subsequent jobs will benefit from a previous job cache and
+      # some others won't), we choose to save built docker images in cached
+      # directories. This ensures that we will be able to load built docker
+      # images in subsequent jobs.
+      - run:
+          name: Store docker image in cache
+          command: |
+            docker save \
+              -o docker/images/forum.tar \
+              forum:${CIRCLE_SHA1}
+      - save_cache:
+          paths:
+            - ~/forum/docker/images/
+          key: docker-debian-images-{{ .Revision }}
+
+  # ---- DockerHub publication job ----
+  hub:
+    machine: true
+    working_directory: ~/forum
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - docker-debian-images-{{ .Revision }}
+      # Load all built images in all flavors
+      - run:
+          name: Load images to docker engine
+          command: |
+            docker load < docker/images/forum.tar
+      # Login to DockerHub to Publish new images
+      #
+      # Nota bene: you'll need to define the following secrets environment vars
+      # in CircleCI interface:
+      #
+      #   - DOCKER_USER
+      #   - DOCKER_PASS
+      - run:
+          name: Login to DockerHub
+          command:
+            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+
+      # Tag docker images with the same pattern used in Git (Semantic Versioning)
+      #
+      # Git tag: v1.0.1
+      # Docker tag: 1.0.1(-alpine)(-dev)
+      - run:
+          name: Tag images
+          command: |
+            docker images fundocker/forum
+            DOCKER_TAG=$(echo ${CIRCLE_TAG} | sed 's/^v//')
+            echo "DOCKER_TAG: ${DOCKER_TAG} (from Git tag: ${CIRCLE_TAG})"
+            docker tag forum:${CIRCLE_SHA1} fundocker/forum:latest
+            docker tag forum:${CIRCLE_SHA1} fundocker/forum:${DOCKER_TAG}
+            docker images "fundocker/forum:${DOCKER_TAG}*"
+      # Publish images to DockerHub
+      #
+      # Nota bene: logged user (see "Login to DockerHub" step) must have write
+      # permission for the project's repository; this also implies that the
+      # DockerHub repository already exists.
+      - run:
+          name: Publish images
+          command: |
+            DOCKER_TAG=$(echo ${CIRCLE_TAG} | sed 's/^v//')
+            echo "DOCKER_TAG: ${DOCKER_TAG} (from Git tag: ${CIRCLE_TAG})"
+            docker push fundocker/forum:latest
+            docker push fundocker/forum:${DOCKER_TAG}
