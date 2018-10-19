@@ -13,7 +13,6 @@ generate-version-file: &generate-version-file
         "$CIRCLE_BUILD_URL" > version.json
 version: 2
 jobs:
-  # Docker/back-end jobs
   # Build job
   # Build the Docker image ready for production
   build:
@@ -105,3 +104,30 @@ jobs:
             echo "DOCKER_TAG: ${DOCKER_TAG} (from Git tag: ${CIRCLE_TAG})"
             docker push fundocker/forum:latest
             docker push fundocker/forum:${DOCKER_TAG}
+workflows:
+  version: 2
+
+  forum:
+    jobs:
+
+      # Docker jobs
+      #
+      # Build production
+      # (debian-based)
+      - build:
+          filters:
+            tags:
+              only: /.*/
+
+      # DockerHub publication.
+      #
+      # Publish docker images only if the build succeeds and
+      # it has been tagged with a tag starting with the letter v
+      - hub:
+          requires:
+            - build
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+            only: /^v.*/
