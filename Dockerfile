@@ -55,4 +55,4 @@ FROM builder as production
 COPY --from=downloads /downloads/forum ./
 
 # Start the application using bundler
-CMD bundle exec ruby app.rb
+CMD bundle exec ruby app.rb -p 4567 -o 0.0.0.0
