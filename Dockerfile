@@ -10,7 +10,7 @@
 ARG FORUM_RELEASE=open-release/hawthorn.1
 
 # === BASE ===
-FROM ruby:2.4.1 as base
+FROM ruby:2.4.1-slim as base
 
 
 # === DOWNLOAD ===
@@ -35,6 +35,14 @@ RUN mkdir forum && \
 # === BUILDER ===
 FROM base as builder
 
+# Install required packages for the build stage
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y \
+    git \
+    build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
 # Upgrade bundler to the latest release
 RUN gem install bundler
 
@@ -51,9 +59,19 @@ RUN echo "gem 'puma'" >> Gemfile && \
 # Install dependencies in the vendor/bundle directory
 RUN bundle install --deployment
 
-
 # === PRODUCTION ===
-FROM builder as production
+FROM base as production
+
+WORKDIR /app
+
+# Copy application sources and dependencies
+COPY --from=builder /app ./
+
+# FIXME: Re-installing dependencies seems to "re-configure" bundler. After this
+# fast step (nothing is re-installed), the bundler environment seems properly
+# set and binaries can be executed via "bundle exec".
+RUN gem install bundler && \
+    bundle install --deployment
 
 # Start the application using bundler
 CMD bundle exec puma
