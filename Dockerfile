@@ -4,10 +4,10 @@
 # your build command:
 #
 # $ docker build \
-#     --build-arg FORUM_RELEASE="open-release/hawthorn.2" \
-#     -t forum:hawthorn.2 \
+#     --build-arg FORUM_RELEASE="open-release/hawthorn.1" \
+#     -t forum:hawthorn.1 \
 #     .
-ARG FORUM_RELEASE=open-release/hawthorn.2
+ARG FORUM_RELEASE=open-release/hawthorn.1
 
 # === BASE ===
 FROM ruby:2.4.1 as base
@@ -41,8 +41,12 @@ RUN gem install bundler
 # Working from /app because bundled dependencies will be installed from here
 WORKDIR /app
 
-# Only copy Gemfile* files required to install dependencies
-COPY --from=downloads /downloads/forum/Gemfile* ./
+# Copy application sources to install dependencies
+COPY --from=downloads /downloads/forum ./
+
+# Add puma dependency and update the lockfile
+RUN echo "gem 'puma'" >> Gemfile && \
+    bundle lock
 
 # Install dependencies in the vendor/bundle directory
 RUN bundle install --deployment
@@ -51,8 +55,5 @@ RUN bundle install --deployment
 # === PRODUCTION ===
 FROM builder as production
 
-# Copy application sources
-COPY --from=downloads /downloads/forum ./
-
 # Start the application using bundler
-CMD bundle exec ruby app.rb -p 4567 -o 0.0.0.0
+CMD bundle exec puma

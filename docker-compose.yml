@@ -18,7 +18,7 @@ services:
     image: forum:latest
     env_file: .env
     ports:
-      - "4567:4567"
+      - "9292:9292"
     depends_on:
       - mongodb
       - elasticsearch
