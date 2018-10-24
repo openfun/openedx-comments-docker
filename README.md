@@ -33,7 +33,7 @@ $ make bootstrap
 If everything went well, you should now be able to access to the following
 services:
 
-- Forum: https://localhost:4567
+- Forum: https://localhost:9292
 - Open edX LMS: http://localhost:8000
 - MailCatcher: http://localhost:1080
 
